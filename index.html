@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Генератор токенов для конкурса</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 500px;
+      margin: 2rem auto;
+      padding: 1rem;
+      background: #f9f9f9;
+      border-radius: 8px;
+      box-shadow: 0 0 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 1rem;
+      margin-top: 1rem;
+      cursor: pointer;
+    }
+    #token, #status {
+      margin-top: 1rem;
+      font-weight: bold;
+      word-break: break-all;
+    }
+    #prizeInput {
+      margin-top: 1rem;
+      width: 100%;
+      padding: 8px;
+      font-size: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Генератор токенов</h1>
+
+  <button id="generateBtn">Сгенерировать токен</button>
+  <div id="token"></div>
+
+  <button id="checkBtn" disabled>Проверить токен</button>
+  <div id="status"></div>
+
+  <input id="prizeInput" type="text" placeholder="Введите приз (например, 'Сертификат')" />
+  <button id="notifyBtn" disabled>Отправить уведомление о выигрыше</button>
+
+  <script>
+    const generateBtn = document.getElementById('generateBtn');
+    const checkBtn = document.getElementById('checkBtn');
+    const notifyBtn = document.getElementById('notifyBtn');
+    const tokenDiv = document.getElementById('token');
+    const statusDiv = document.getElementById('status');
+    const prizeInput = document.getElementById('prizeInput');
+
+    let currentToken = null;
+
+    // Функция для запроса генерации токена
+    async function generateToken() {
+      tokenDiv.textContent = 'Генерируем токен...';
+      statusDiv.textContent = '';
+      try {
+        const res = await fetch('/api/generate-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json();
+        if (data.success) {
+          currentToken = data.token;
+          tokenDiv.textContent = `Ваш токен: ${currentToken}`;
+          checkBtn.disabled = false;
+          notifyBtn.disabled = false;
+          statusDiv.textContent = '';
+        } else {
+          tokenDiv.textContent = 'Ошибка генерации токена.';
+        }
+      } catch (e) {
+        tokenDiv.textContent = 'Ошибка сети или сервера.';
+      }
+    }
+
+    // Функция для проверки токена
+    async function checkToken() {
+      if (!currentToken) return;
+      statusDiv.textContent = 'Проверяем токен...';
+      try {
+        const res = await fetch('/api/check-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: currentToken }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          statusDiv.textContent = `Токен действителен. Осталось использований: ${data.remaining}`;
+        } else {
+          statusDiv.textContent = `Ошибка: ${data.error}`;
+        }
+      } catch (e) {
+        statusDiv.textContent = 'Ошибка сети или сервера.';
+      }
+    }
+
+    // Функция для отправки уведомления о выигрыше
+    async function sendNotification() {
+      if (!currentToken) {
+        alert('Сначала сгенерируйте токен.');
+        return;
+      }
+      const prize = prizeInput.value.trim();
+      if (!prize) {
+        alert('Введите название приза.');
+        return;
+      }
+      statusDiv.textContent = 'Отправляем уведомление...';
+      try {
+        // Проверим токен и увеличим счетчик использований
+        let resUse = await fetch('/api/use-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: currentToken }),
+        });
+        let dataUse = await resUse.json();
+        if (!dataUse.success) {
+          statusDiv.textContent = `Ошибка использования токена: ${dataUse.error}`;
+          return;
+        }
+
+        // Отправим уведомление о выигрыше
+        const res = await fetch('/api/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prize }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          statusDiv.textContent = `Уведомление отправлено. Приз: ${prize}`;
+          prizeInput.value = '';
+        } else {
+          statusDiv.textContent = `Ошибка уведомления: ${data.error}`;
+        }
+      } catch (e) {
+        statusDiv.textContent = 'Ошибка сети или сервера.';
+      }
+    }
+
+    generateBtn.addEventListener('click', generateToken);
+    checkBtn.addEventListener('click', checkToken);
+    notifyBtn.addEventListener('click', sendNotification);
+  </script>
+</body>
+</html>
